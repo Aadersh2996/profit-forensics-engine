@@ -1,0 +1,4 @@
+subscription_id,customer_id,status,amount
+subscription-1,repeat-subscriber,renewal_failed,100
+subscription-2,repeat-subscriber,renewal_failed,100
+subscription-3,cancelled-subscriber,cancelled,200

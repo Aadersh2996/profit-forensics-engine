@@ -1,0 +1,4 @@
+invoice_id,customer_id,status,amount,paid_amount,due_date,created_at
+invoice-overdue,invoice-customer-1,open,200,50,2025-01-01T00:00:00Z,2025-01-01T00:00:00Z
+invoice-current,invoice-customer-2,open,100,0,2025-01-03T00:00:00Z,2025-01-03T00:00:00Z
+invoice-paid-later,invoice-customer-3,paid,50,50,2025-01-05T00:00:00Z,2025-01-05T00:00:00Z
