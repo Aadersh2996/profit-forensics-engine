@@ -1,0 +1,5 @@
+payment_id,status,amount,created_at,error_reason
+payment-pending,pending,100,2025-01-01T00:00:00Z,
+payment-captured,captured,500,2025-01-03T00:00:00Z,
+payment-timeout-1,failed,120,2025-01-02T00:00:00Z,gateway timeout
+payment-timeout-2,failed,150,2025-01-02T00:00:00Z,gateway timeout

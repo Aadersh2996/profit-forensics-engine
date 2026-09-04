@@ -1,0 +1,15 @@
+id,customer_id,discount_amount
+discount-01,customer-01,10
+discount-02,customer-02,10
+discount-03,customer-03,10
+discount-04,customer-04,10
+discount-05,customer-05,10
+discount-06,customer-06,10
+discount-07,customer-07,10
+discount-08,customer-08,10
+discount-09,customer-09,10
+discount-10,customer-10,10
+discount-heavy-01,heavy-discount-customer,200
+discount-heavy-02,heavy-discount-customer,200
+discount-heavy-03,heavy-discount-customer,200
+discount-heavy-04,heavy-discount-customer,200

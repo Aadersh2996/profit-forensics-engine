@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+import hashlib
+import hmac
+import json
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.api.investigations import create_investigation
 from app.config import settings
+from app.db.db_models import Investigation, TimelineEventORM
 from app.db.session import get_db
 from app.models.schemas import (
     InvestigationRequest,
@@ -15,6 +21,8 @@ from app.models.schemas import (
     RazorpayCredentials,
     RazorpaySyncRequest,
     RazorpaySyncResponse,
+    RazorpayWebhookResponse,
+    TimelineEvent,
 )
 from app.services.razorpay_client import RazorpayClient, RazorpayClientError
 from app.services.razorpay_ingestion import persist_normalized_razorpay_dataset
@@ -22,6 +30,22 @@ from app.services.razorpay_normalization import normalize_razorpay_payload
 
 
 router = APIRouter(prefix="/razorpay", tags=["razorpay"])
+logger = logging.getLogger(__name__)
+
+_WEBHOOK_EVENTS: dict[str, tuple[str, str, str]] = {
+    "payment.authorized": ("payments", "payment", "Payment Authorized"),
+    "payment.captured": ("payments", "payment", "Payment Captured"),
+    "payment.failed": ("payments", "payment", "Payment Failed"),
+    "refund.created": ("refunds", "refund", "Refund Created"),
+    "refund.processed": ("refunds", "refund", "Refund Processed"),
+    "order.paid": ("orders", "order", "Order Paid"),
+    "subscription.charged": ("subscriptions", "subscription", "Subscription Charged"),
+    "subscription.cancelled": ("subscriptions", "subscription", "Subscription Cancelled"),
+    "subscription.paused": ("subscriptions", "subscription", "Subscription Paused"),
+    "invoice.paid": ("invoices", "invoice", "Invoice Paid"),
+    "invoice.expired": ("invoices", "invoice", "Invoice Expired"),
+    "settlement.processed": ("settlements", "settlement", "Settlement Processed"),
+}
 
 
 def _resolve_credentials(
@@ -54,6 +78,84 @@ def _client(credentials: RazorpayCredentials) -> RazorpayClient:
 
 def _provider_error(exc: RazorpayClientError) -> HTTPException:
     return HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+
+
+def _verify_webhook_signature(raw_body: bytes, signature: str | None) -> None:
+    """Validate Razorpay's HMAC-SHA256 signature against the unmodified request body."""
+
+    if not settings.razorpay_webhook_secret:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Razorpay webhook secret is not configured.",
+        )
+    if not signature:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing Razorpay webhook signature.",
+        )
+    expected = hmac.new(
+        settings.razorpay_webhook_secret.encode("utf-8"), raw_body, hashlib.sha256
+    ).hexdigest()
+    if not hmac.compare_digest(expected, signature):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Razorpay webhook signature.",
+        )
+
+
+def _webhook_entity(event: str, payload: object) -> tuple[str, str, str, dict[str, object]]:
+    """Extract the primary Razorpay resource entity for one supported event."""
+
+    event_spec = _WEBHOOK_EVENTS.get(event)
+    if event_spec is None:
+        raise ValueError("Unsupported Razorpay webhook event.")
+    resource, payload_key, title = event_spec
+    if not isinstance(payload, dict):
+        raise ValueError("Webhook payload must be an object.")
+    resource_payload = payload.get(payload_key)
+    if not isinstance(resource_payload, dict):
+        raise ValueError(f"Webhook payload is missing the {payload_key} resource.")
+    entity = resource_payload.get("entity")
+    if not isinstance(entity, dict) or not isinstance(entity.get("id"), str) or not entity["id"].strip():
+        raise ValueError(f"Webhook {payload_key} entity must include a non-empty id.")
+    return resource, payload_key, title, entity
+
+
+def _append_webhook_timeline(
+    db: Session, report, *, event: str, title: str
+):
+    """Annotate a fresh webhook-driven case without changing its graph workflow."""
+
+    annotations = [
+        TimelineEvent(
+            title="Razorpay Webhook Received",
+            description=f"Verified Razorpay event {event} was normalized before investigation.",
+            stage="razorpay_webhook",
+            progress=1.0,
+        ),
+        TimelineEvent(
+            title=title,
+            description="The verified provider event was recorded as the source of this investigation.",
+            stage="razorpay_webhook",
+            progress=1.0,
+        ),
+    ]
+    investigation = db.get(Investigation, report.investigation_id)
+    if investigation is None:
+        raise RuntimeError("Webhook investigation was not persisted.")
+    investigation.timeline_events.extend(
+        TimelineEventORM(
+            id=item.id,
+            title=item.title,
+            description=item.description,
+            stage=item.stage,
+            progress=item.progress,
+            created_at=item.created_at,
+        )
+        for item in annotations
+    )
+    db.commit()
+    return report.model_copy(update={"timeline": [*report.timeline, *annotations]})
 
 
 @router.get("/status", response_model=RazorpayConnectionStatus)
@@ -134,4 +236,57 @@ def sync_razorpay(
         datasets=datasets,
         investigation=report,
         message=("Razorpay data synchronized and investigation completed." if report else "Razorpay data synchronized."),
+    )
+
+
+@router.post("/webhook", response_model=RazorpayWebhookResponse)
+async def receive_razorpay_webhook(
+    request: Request, db: Session = Depends(get_db)
+) -> RazorpayWebhookResponse:
+    """Verify, normalize, and investigate one supported Razorpay webhook event."""
+
+    raw_body = await request.body()
+    _verify_webhook_signature(raw_body, request.headers.get("X-Razorpay-Signature"))
+    try:
+        envelope = json.loads(raw_body)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Webhook body must be valid JSON."
+        ) from exc
+    if not isinstance(envelope, dict):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Webhook body must be a JSON object.",
+        )
+    event = envelope.get("event")
+    if not isinstance(event, str) or not event.strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Webhook event must be a non-empty string.",
+        )
+    event = event.strip()
+    if event not in _WEBHOOK_EVENTS:
+        logger.info("Ignoring unsupported verified Razorpay webhook event: %s", event)
+        return RazorpayWebhookResponse(
+            accepted=True, event=event, message="Webhook event is not supported and was ignored."
+        )
+    try:
+        resource, _, title, entity = _webhook_entity(event, envelope.get("payload"))
+        records = normalize_razorpay_payload(resource, entity)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
+    dataset = persist_normalized_razorpay_dataset(
+        upload_dir=settings.upload_dir, resource=resource, records=records
+    )
+    report = create_investigation(InvestigationRequest(datasets=[dataset]), db)
+    report = _append_webhook_timeline(db, report, event=event, title=title)
+    logger.info("Processed verified Razorpay webhook event: %s", event)
+    return RazorpayWebhookResponse(
+        accepted=True,
+        event=event,
+        message="Webhook normalized and investigated.",
+        dataset=dataset,
+        investigation=report,
     )

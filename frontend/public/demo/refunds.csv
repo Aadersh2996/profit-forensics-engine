@@ -1,0 +1,4 @@
+refund_id,customer_id,order_id,amount,created_at
+refund-1,repeat-customer,order-1,100,2025-01-01T00:00:00Z
+refund-2,repeat-customer,order-2,100,2025-01-02T00:00:00Z
+refund-3,other-customer,order-3,50,2025-01-03T00:00:00Z

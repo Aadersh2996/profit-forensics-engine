@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     )
     razorpay_key_id: str | None = Field(default=None, validation_alias="RAZORPAY_KEY_ID")
     razorpay_key_secret: str | None = Field(default=None, validation_alias="RAZORPAY_KEY_SECRET")
+    razorpay_webhook_secret: str | None = Field(
+        default=None, validation_alias="RAZORPAY_WEBHOOK_SECRET"
+    )
     razorpay_api_base_url: str = Field(
         default="https://api.razorpay.com/v1", validation_alias="RAZORPAY_API_BASE_URL"
     )

@@ -221,3 +221,13 @@ class RazorpaySyncResponse(DomainModel):
     datasets: list[DatasetMetadata]
     message: str
     investigation: InvestigationReport | None = None
+
+
+class RazorpayWebhookResponse(DomainModel):
+    """Outcome for one verified Razorpay webhook delivery."""
+
+    accepted: bool
+    event: str = Field(min_length=1, max_length=100)
+    message: str
+    dataset: DatasetMetadata | None = None
+    investigation: InvestigationReport | None = None

@@ -1,151 +1,218 @@
 # Profit Forensics Engine
 
-Profit Forensics Engine is a Buildathon-ready financial-investigation workspace. Upload operational CSVs or read-only Razorpay data, let a deterministic LangGraph workflow isolate supported signals, and review evidence-backed cases, financial impact, recommendations, and an executive report in one dashboard.
+> **From payment operations to defensible financial action.**
 
-The engine investigates payment recovery, refunds, discount leakage, subscription recovery, and invoice collection. Routing, anomaly detection, confidence, retry decisions, and financial calculations are deterministic. LLMs are optional and limited to narrative synthesis.
+Profit Forensics Engine is a deterministic financial-investigation workspace for operations teams. Bring in CSV files, read-only Razorpay data, or verified Razorpay webhooks; the engine identifies evidence-backed payment recovery, refund, discount, subscription, and invoice-collection opportunities—then turns them into traceable case files and a decision-ready report.
 
-## Product tour
+Built for the **Razorpay AI Buildathon**, it makes one principle non-negotiable: LLMs may help write narrative, but they never calculate money, confidence, routing, or anomaly detection.
 
-The Next.js workspace provides a clean demo flow:
+## The problem
 
-1. **Landing** — explains the deterministic workflow with a React Flow process map.
-2. **CSV upload** — inspects each file and registers metadata without putting DataFrames into graph state.
-3. **Case setup and progress** — shows planner selection, investigation stages, and the authoritative final timeline.
-4. **Case dashboard** — presents financial impact, evidence cards, root-cause hypotheses, recommendations, and executive reporting.
-5. **History** — retrieves completed persisted investigations.
+Financial operations data is fragmented. Failed payments, refunds, discounts, subscription churn, and unpaid invoices often live in separate exports or provider surfaces. That makes it hard to answer three practical questions quickly:
 
-The browser visual QA captures a live dashboard populated from the included synthetic data: ₹9,500 monthly and ₹1,14,000 annualized exposure across five traceable case files. Run the demo locally to view the interactive screens.
+1. Where is revenue leaking or recoverable?
+2. What evidence supports the finding?
+3. What should the operations team do first?
+
+## The solution
+
+Profit Forensics normalizes incoming records into one investigation contract, lets a deterministic planner select only relevant investigators, and persists the resulting evidence, confidence, impact, timeline, recommendations, and executive report.
+
+- **Bring your data:** CSV upload, Razorpay REST sync, or signed Razorpay webhook.
+- **Investigate deterministically:** reusable rules, fixed routing, one bounded evidence-refinement retry.
+- **Act with context:** case files link findings to records and financial impact.
+
+## Key features
+
+| Capability | What it delivers |
+| --- | --- |
+| Deterministic investigators | Payment recovery, refund leakage, discount leakage, subscription recovery, and revenue collection. |
+| Evidence traceability | Every case includes source datasets, record IDs, rule outputs, confidence, and amount. |
+| Financial integrity | Impact is calculated in code from normalized records—not by an LLM. |
+| Razorpay-native ingestion | Read-only REST synchronization plus HMAC-verified webhooks use the same normalized data contract as CSVs. |
+| Demo-ready workflow | The bundled synthetic CSV set runs every investigator in under two minutes. |
+| Polished review UI | Planner scope, live completion view, case dashboard, timeline, history, and executive report. |
 
 ## Architecture
 
 ```mermaid
 flowchart LR
     CSV[CSV upload] --> META[Dataset metadata]
-    RZP[Razorpay REST API] --> NORM[Normalized Razorpay CSV]
-    NORM --> META
+    REST[Razorpay REST sync] --> NORM[Existing Razorpay normalizer]
+    WEBHOOK[Verified Razorpay webhook] --> NORM
+    NORM --> CSVN[Normalized local CSV]
+    CSVN --> META
     META --> PLAN[Deterministic planner]
-    PLAN --> INV[Specialized investigators]
-    INV -->|low confidence + support data| RETRY[One bounded refinement]
-    RETRY --> INV
-    INV --> ROOT[Root-cause synthesis]
-    ROOT --> IMPACT[Deterministic impact estimator]
-    IMPACT --> REC[Recommendation synthesis]
-    REC --> REPORT[Executive report]
-    REPORT --> API[Persisted FastAPI report]
-    API --> UI[Next.js case dashboard]
+    PLAN --> INV[Five specialized investigators]
+    INV --> GATE{Low confidence +\nsupporting evidence?}
+    GATE -->|once at most| REFINE[Evidence refinement]
+    REFINE --> INV
+    GATE -->|complete| SYNTH[Root cause and report synthesis]
+    SYNTH --> IMPACT[Deterministic financial impact]
+    IMPACT --> REPORT[Persisted case report]
+    REPORT --> UI[Next.js dashboard]
 ```
 
-| Layer | Responsibility |
-| --- | --- |
-| `backend/app/models/schemas.py` | Validated domain and API contracts |
-| `backend/app/graph/` | Typed LangGraph state, pure routers, compiled workflow |
-| `backend/app/graph/nodes/` | Case management, analysis, refinement, impact, and synthesis |
-| `backend/app/services/investigators/` | Shared CSV, confidence, and case-file helpers |
-| `backend/app/api/` | Dataset upload and investigation APIs |
-| `backend/app/services/razorpay_normalization.py` | Pure Razorpay payload normalization boundary |
-| `backend/app/services/razorpay_client.py` | Bounded, read-only Razorpay REST pagination and retry client |
-| `frontend/` | Next.js, TypeScript, Tailwind, shadcn-style components, and React Flow UI |
+The architecture keeps DataFrames temporary and outside `CaseState`. The global retry budget is exactly one. Razorpay-specific details end at the normalization boundary; investigators are provider-agnostic.
 
-DataFrames are temporary investigator inputs and are never stored in `CaseState`. The global retry budget is exactly one. Case-file revisions merge by stable ID, preventing a refinement rerun from double-counting impact.
-
-## Investigation workflow
+## Investigation flow
 
 ```mermaid
 sequenceDiagram
-    participant U as Analyst
-    participant F as Frontend
-    participant A as FastAPI
-    participant G as LangGraph
-    U->>F: Upload typed CSVs
-    F->>A: POST /datasets/upload
-    U->>F: Create investigation
-    F->>A: POST /investigations
-    A->>G: Run deterministic workflow
-    G->>G: Plan, investigate, optionally refine once
-    G->>G: Estimate impact and synthesize narrative
-    A-->>F: Persisted completed report
-    F->>A: GET /investigations/{id}
-    A-->>F: Evidence, timeline, cases, impact
+    participant Analyst
+    participant UI as Next.js UI
+    participant API as FastAPI
+    participant Graph as LangGraph
+    Analyst->>UI: Upload CSVs or sync Razorpay
+    UI->>API: Normalized DatasetMetadata
+    API->>Graph: Start investigation
+    Graph->>Graph: Plan → investigate → optionally refine once
+    Graph->>Graph: Estimate impact → synthesize report
+    API-->>UI: Persisted evidence, timeline, report
+    UI-->>Analyst: Review cases and actions
 ```
 
-## Quick start
+## Razorpay integration flow
+
+```mermaid
+flowchart LR
+    RP[Razorpay API / webhook] --> VERIFY{Webhook signature valid?}
+    VERIFY -->|invalid| REJECT[401]
+    VERIFY -->|valid REST or webhook| NORMALIZE[Canonical normalization]
+    NORMALIZE --> DATASET[Local normalized CSV + DatasetMetadata]
+    DATASET --> EXISTING[Existing planner and investigators]
+    EXISTING --> DASH[Existing dashboard and timeline]
+```
+
+REST sync supports payments, refunds, orders, customers, subscriptions, invoices, and settlements. Webhooks validate `X-Razorpay-Signature` using the raw-body HMAC-SHA256 contract before any payload is parsed. Credentials and webhook secrets are never persisted.
+
+## Screenshots
+
+Screenshots are intentionally not fabricated. Add captured local images to [`docs/images/`](docs/images/) using the release-asset slots below before a public repository submission.
+
+| Screen | Placeholder |
+| --- | --- |
+| Landing page | `docs/images/landing-page.png` — capture pending |
+| Dataset upload and demo shortcut | `docs/images/upload-page.png` — capture pending |
+| Investigation progress | `docs/images/investigation-timeline.png` — capture pending |
+| Case dashboard | `docs/images/dashboard.png` — capture pending |
+| Executive report | `docs/images/executive-report.png` — capture pending |
+| Razorpay sync | `docs/images/razorpay-sync.png` — capture pending |
+
+## Two-minute demo walkthrough
+
+1. Start backend and frontend (commands below), then open `http://localhost:3000`.
+2. Select **Run demo dataset**. The UI uploads the six checked-in synthetic CSVs through the normal upload API.
+3. Select **Continue to investigation**, then **Launch investigation**.
+4. The completion screen moves to the dashboard with planner scope, five case files, timeline, confidence, and deterministic financial impact.
+5. Open **Cases**, **Timeline**, and **Executive report**. Explain that every displayed amount is calculated from the source records.
+6. Optionally open **Connect Razorpay** to show Test Mode / environment credential guidance without requiring live credentials.
+
+See [demo/JUDGING_GUIDE.md](demo/JUDGING_GUIDE.md) for ready-to-present three- and five-minute scripts.
+
+## Local setup
 
 Requirements: Python 3.12+ and Node.js 22+.
 
 ```powershell
-# Terminal 1: backend
+# Terminal 1
 cd backend
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 uvicorn app.main:app --reload
 
-# Terminal 2: frontend
+# Terminal 2
 cd frontend
 Copy-Item .env.example .env.local
 npm install
 npm run dev
 ```
 
-Open `http://localhost:3000`. API docs are available at `http://localhost:8000/docs`; health is `GET /health`.
+Open `http://localhost:3000`. API documentation is at `http://localhost:8000/docs`; health is `GET /health`.
 
-For a containerized run, see [DEPLOYMENT.md](DEPLOYMENT.md):
+## Docker setup
 
 ```powershell
+Copy-Item .env.example .env
 docker compose up --build
 ```
 
-## API
+The UI runs on `http://localhost:3000`; FastAPI runs on `http://localhost:8000`. The Compose volume retains SQLite data and uploaded evidence across container restarts. Full deployment notes are in [DEPLOYMENT.md](DEPLOYMENT.md).
 
-| Method | Endpoint | Purpose |
-| --- | --- | --- |
-| `GET` | `/health` | Health check |
-| `POST` | `/datasets/upload` | Upload and inspect a typed CSV |
-| `GET` | `/razorpay/status` | Check environment-based Razorpay configuration |
-| `POST` | `/razorpay/connect` | Validate read-only Razorpay credentials without persisting them |
-| `POST` | `/razorpay/sync` | Fetch, normalize, and optionally investigate selected Razorpay resources |
-| `POST` | `/investigations` | Run and persist an investigation |
-| `GET` | `/investigations` | List persisted reports |
-| `GET` | `/investigations/{investigation_id}` | Retrieve one report |
+# Live Deployment
 
-`dataset_type` drives planner selection. Supported type keywords include `payment`, `refund`, `discount`, `subscription`, `invoice`, and `settlement`.
+Deploy the backend first, then connect Vercel to it:
 
-## Razorpay ingestion
+1. Push this repository to GitHub.
+2. In Railway, create a GitHub-backed service with `backend` as its Root Directory. Attach a Volume at `/data`, set the backend variables, deploy, and generate its public domain.
+3. In Vercel, import the same repository with `frontend` as its Root Directory. Set `NEXT_PUBLIC_API_URL` to the Railway public domain (without a trailing slash), then deploy.
+4. Open `https://<project>.vercel.app`, load the demo dataset, and launch an investigation. Check `https://<project>.up.railway.app/health` if the UI cannot reach the API.
 
-Open **Connect Razorpay** in the workspace, enter a read-only Razorpay Key ID and Key Secret, validate the connection, select resources, and start an investigation. The credentials are used only for the outgoing request and are never persisted. For server-managed demo credentials, set `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` in `.env` instead.
+The full zero-to-public-URL walkthroughs are [Railway](docs/DEPLOY_RAILWAY.md) and [Vercel](docs/DEPLOY_VERCEL.md). The production environment matrix is maintained in [DEPLOYMENT.md](DEPLOYMENT.md#production-environment-matrix).
 
-The integration fetches payments, refunds, orders, customers, subscriptions, invoices, and settlements using Razorpay collection pagination (`count`/`skip`), bounded retries for transient failures and rate limits, and response validation. It converts provider amounts from subunits exactly once, stores normalized records as local CSV inputs, and sends their ordinary `DatasetMetadata` to the unchanged planner. No investigator has provider-specific code.
+## Environment variables
 
-## Demo
+| Variable | Purpose |
+| --- | --- |
+| `OPENAI_API_KEY` / `OPENAI_MODEL` | Optional narrative-only root-cause, recommendation, and executive synthesis. |
+| `DATABASE_URL`, `UPLOAD_DIR` | Local persistence locations. |
+| `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` | Optional server-managed, read-only Razorpay REST ingestion. |
+| `RAZORPAY_WEBHOOK_SECRET` | Required to receive and verify Razorpay webhooks. |
+| `RAZORPAY_TIMEOUT_SECONDS` | Bounded Razorpay REST request timeout. |
 
-The [`demo/`](demo/) folder contains six synthetic CSVs designed to exercise every investigator. Upload them in the UI, or follow the reproducible PowerShell walkthrough in [demo/README.md](demo/README.md). The demo deliberately triggers one bounded payment-evidence refinement, then completes with five case files and a final timeline.
+Request-scoped Razorpay UI credentials are used only for the outbound connection/sync request. CSV mode does not require Razorpay credentials.
 
-## Optional LLM synthesis
+## Webhook setup and local testing
 
-Set `OPENAI_API_KEY` and optionally `OPENAI_MODEL` to enable root-cause hypotheses, recommendation wording, and an executive narrative. Without credentials, the engine completes with an explicit deterministic executive-summary fallback. LLMs never calculate monetary values, confidence, routes, or retries.
-
-## Testing and validation
+Configure a public HTTPS endpoint such as `https://your-host.example/razorpay/webhook` in Razorpay Dashboard, select the supported events, and set the same `RAZORPAY_WEBHOOK_SECRET` in the backend environment. For a local test tunnel:
 
 ```powershell
+ngrok http 8000
+# Register https://<tunnel-host>/razorpay/webhook in Razorpay Test Mode.
+```
+
+Supported events include payment authorized/captured/failed, refund created/processed, order paid, subscription charged/cancelled/paused, invoice paid/expired, and settlement processed. Unknown but validly signed events are logged and acknowledged safely.
+
+## Tests and validation
+
+```powershell
+# Backend
 cd backend
 python -m pytest ..\tests
 python -m compileall app
+
+# Frontend
+cd ..\frontend
+npm run build
+npm run lint
 ```
 
-The suite covers investigator rules, data validation, bounded retry behavior, API upload/execution/retrieval, Razorpay normalization, graph compilation, and a complete end-to-end lifecycle.
+The suite covers rules, malformed/empty data, bounded retries, API persistence, CSV ingestion, Razorpay REST pagination/normalization, webhook signature validation, and CSV/Razorpay output equivalence.
 
-## Limitations
+## Folder structure
 
-- SQLite and synchronous investigation execution are intentionally scoped for the Buildathon demo.
-- Progress is shown as a client-side running-stage view while the synchronous backend works; the final displayed timeline is the graph’s authoritative persisted timeline.
-- Upload storage is local filesystem storage; no authentication, tenancy, or retention policy is included.
-- Razorpay synchronization is a synchronous, read-only pull intended for bounded demo-sized collections; use a scheduled incremental ingestion process for large accounts.
-- Root-cause and recommendation narratives require an OpenAI key; deterministic evidence remains fully usable without one.
+```text
+backend/app/
+  api/                 FastAPI upload, investigation, and Razorpay boundaries
+  graph/               CaseState, planner, routers, and investigation nodes
+  services/            Ingestion, provider normalization, and shared helpers
+  models/              Pydantic contracts
+frontend/
+  app/                 Landing, upload, progress, dashboard, history, Razorpay pages
+  components/          Reusable UI, timeline, report, and workflow graph
+demo/                  Synthetic data and judging guide
+docs/images/           Screenshot placeholders for release assets
+tests/                 Deterministic, API, integration, and webhook coverage
+```
 
-## Suggested post-Buildathon improvements
+## Future improvements
 
-- Add authenticated workspaces and scoped dataset retention.
-- Move execution to a job queue and stream server-side timeline events.
-- Add database migrations and managed Postgres persistence.
-- Add observability, audit retention, and role-based review workflows.
-- Expand normalization tests against versioned provider payload fixtures.
+- Event-id idempotency and asynchronous webhook execution.
+- Authenticated workspaces, retention controls, and managed persistence.
+- Server-sent authoritative progress events for long-running cases.
+- Versioned provider fixtures and deeper reconciliation sources.
+
+## Buildathon notes
+
+This is intentionally a production-inspired MVP, not an enterprise platform. SQLite, synchronous execution, local uploads, and per-webhook fresh investigations keep the submission inspectable and reproducible. The core value is preserved: deterministic financial evidence first, optional AI narrative second.
