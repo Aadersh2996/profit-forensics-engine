@@ -30,3 +30,14 @@ def test_csv_upload_rejects_other_file_types(tmp_path, monkeypatch) -> None:
     )
 
     assert response.status_code == 415
+
+
+def test_csv_upload_rejects_whitespace_dataset_type(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(settings, "upload_dir", tmp_path)
+    response = TestClient(app).post(
+        "/datasets/upload",
+        data={"dataset_type": "   "},
+        files={"file": ("payments.csv", b"payment_id,amount\np1,100\n", "text/csv")},
+    )
+
+    assert response.status_code == 422

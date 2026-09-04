@@ -38,9 +38,20 @@ def test_investigation_endpoints_execute_and_retrieve_a_report(tmp_path: Path, m
 
     client = TestClient(app)
     created = client.post("/investigations", json=payload)
+    listed = client.get("/investigations")
     retrieved = client.get("/investigations/PF-API")
 
     assert created.status_code == 201
     assert created.json()["status"] == "completed"
+    assert listed.status_code == 200
+    assert listed.json()[0]["investigation_id"] == "PF-API"
     assert retrieved.status_code == 200
     assert retrieved.json()["case_files"][0]["title"] == "Revenue collection opportunities detected"
+    assert retrieved.json()["datasets"] == created.json()["datasets"]
+    assert retrieved.json()["investigation_plan"][0]["investigator"] == "revenue_opportunity"
+
+    duplicate = client.post("/investigations", json=payload)
+    assert duplicate.status_code == 409
+
+    assert client.post("/investigations", json={"datasets": []}).status_code == 422
+    assert client.get("/investigations/missing").status_code == 404

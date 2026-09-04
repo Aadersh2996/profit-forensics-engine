@@ -22,6 +22,12 @@ async def upload_csv_dataset(
     """Persist and inspect one CSV upload before exposing a dataset reference."""
 
     filename = file.filename or "dataset.csv"
+    normalized_dataset_type = dataset_type.strip()
+    if not normalized_dataset_type:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Dataset type must contain at least one non-whitespace character.",
+        )
     if Path(filename).suffix.lower() != ".csv":
         raise HTTPException(status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail="Only CSV uploads are supported.")
 
@@ -43,7 +49,7 @@ async def upload_csv_dataset(
                 output.write(chunk)
         dataset = inspect_csv_dataset(
             path=destination,
-            dataset_type=dataset_type.strip(),
+            dataset_type=normalized_dataset_type,
             original_filename=filename,
         )
     except HTTPException:

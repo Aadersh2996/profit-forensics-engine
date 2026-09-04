@@ -1,6 +1,8 @@
 """Investigation execution and retrieval endpoints."""
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db.db_models import CaseFileORM, Investigation, RecommendationORM, TimelineEventORM
@@ -11,6 +13,7 @@ from app.models.schemas import (
     CaseFile,
     DatasetMetadata,
     ExecutiveSummary,
+    InvestigationPlanItem,
     InvestigationReport,
     InvestigationRequest,
     InvestigationStatus,
@@ -49,6 +52,8 @@ def _persist_report(db: Session, report: InvestigationReport) -> None:
         current_hypothesis=report.current_hypothesis,
         estimated_monthly_loss=report.estimated_monthly_loss,
         estimated_annual_loss=report.estimated_annual_loss,
+        investigation_plan=[item.model_dump(mode="json") for item in report.investigation_plan],
+        datasets=[dataset.model_dump(mode="json") for dataset in report.datasets],
         executive_summary=(
             report.executive_summary.model_dump(mode="json")
             if report.executive_summary is not None
@@ -93,7 +98,11 @@ def _persist_report(db: Session, report: InvestigationReport) -> None:
         for recommendation in report.recommendations
     ]
     db.add(investigation)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise
 
 
 def _report_from_persisted(investigation: Investigation) -> InvestigationReport:
@@ -106,6 +115,14 @@ def _report_from_persisted(investigation: Investigation) -> InvestigationReport:
         confidence=investigation.confidence,
         estimated_monthly_loss=investigation.estimated_monthly_loss,
         estimated_annual_loss=investigation.estimated_annual_loss,
+        investigation_plan=[
+            InvestigationPlanItem.model_validate(item)
+            for item in (investigation.investigation_plan or [])
+        ],
+        datasets=[
+            DatasetMetadata.model_validate(dataset)
+            for dataset in (investigation.datasets or [])
+        ],
         case_files=[
             CaseFile(
                 id=case_file.id,
@@ -158,6 +175,11 @@ def create_investigation(
 ) -> InvestigationReport:
     """Execute and persist a complete investigation over supplied dataset references."""
 
+    if request.investigation_id and db.get(Investigation, request.investigation_id) is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An investigation with this identifier already exists.",
+        )
     state = build_investigation_graph().invoke(
         {"investigation_id": request.investigation_id, "datasets": request.datasets}
     )
@@ -167,8 +189,24 @@ def create_investigation(
             status_code=status.HTTP_409_CONFLICT,
             detail="An investigation with this identifier already exists.",
         )
-    _persist_report(db, report)
+    try:
+        _persist_report(db, report)
+    except IntegrityError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An investigation with this identifier already exists.",
+        ) from exc
     return report
+
+
+@router.get("", response_model=list[InvestigationReport])
+def list_investigations(db: Session = Depends(get_db)) -> list[InvestigationReport]:
+    """Return persisted investigations ordered by most recent activity."""
+
+    investigations = db.scalars(
+        select(Investigation).order_by(Investigation.updated_at.desc())
+    ).all()
+    return [_report_from_persisted(investigation) for investigation in investigations]
 
 
 @router.get("/{investigation_id}", response_model=InvestigationReport)

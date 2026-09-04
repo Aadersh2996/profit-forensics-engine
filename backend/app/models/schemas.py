@@ -74,7 +74,7 @@ class InvestigationRequest(DomainModel):
     """Input required to execute a graph investigation over registered datasets."""
 
     investigation_id: str | None = Field(default=None, min_length=1, max_length=36)
-    datasets: list[DatasetMetadata] = Field(default_factory=list)
+    datasets: list[DatasetMetadata] = Field(min_length=1)
 
 
 class InvestigationPlanItem(DomainModel):

@@ -1,0 +1,8 @@
+.git
+.venv
+**/__pycache__
+**/.pytest_cache
+frontend/node_modules
+frontend/.next
+profit_forensics.db
+uploads

@@ -32,6 +32,8 @@ class Investigation(Base):
     current_hypothesis: Mapped[str | None] = mapped_column(Text, nullable=True)
     estimated_monthly_loss: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     estimated_annual_loss: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    investigation_plan: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list, nullable=False)
+    datasets: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list, nullable=False)
     executive_summary: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
     case_files: Mapped[list[CaseFileORM]] = relationship(

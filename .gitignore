@@ -1,50 +1,21 @@
 # Python
-__pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-
-# Virtual environments
-.venv/
-venv/
-env/
-ENV/
 backend/.venv/
-
-# Environment variables
-.env
-.env.*
-
-# VS Code
-.vscode/
-
-# JetBrains
-.idea/
-
-# Python caches
+**/__pycache__/
+*.py[cod]
 .pytest_cache/
-.mypy_cache/
+backend/.pytest-tmp/
 
-# Coverage
-.coverage
-htmlcov/
+# Runtime evidence and local persistence
+backend/uploads/
+backend/profit_forensics.db
+*.db-journal
 
-# Build
-build/
-dist/
-*.egg-info/
+# Next.js
+frontend/node_modules/
+frontend/.next/
+frontend/.env.local
+*.tsbuildinfo
 
-# Logs
-*.log
-
-# Database
-*.db
-*.sqlite3
-
-# Node
-node_modules/
-.next/
-
-# OS
-.DS_Store
-Thumbs.db
+# Local secrets
+.env
+backend/.env
