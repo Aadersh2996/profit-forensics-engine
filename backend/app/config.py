@@ -27,6 +27,14 @@ class Settings(BaseSettings):
     confidence_threshold: float = Field(
         default=0.7, validation_alias="CONFIDENCE_THRESHOLD"
     )
+    razorpay_key_id: str | None = Field(default=None, validation_alias="RAZORPAY_KEY_ID")
+    razorpay_key_secret: str | None = Field(default=None, validation_alias="RAZORPAY_KEY_SECRET")
+    razorpay_api_base_url: str = Field(
+        default="https://api.razorpay.com/v1", validation_alias="RAZORPAY_API_BASE_URL"
+    )
+    razorpay_timeout_seconds: float = Field(
+        default=15.0, validation_alias="RAZORPAY_TIMEOUT_SECONDS"
+    )
 
     @field_validator("max_upload_size_mb")
     @classmethod
@@ -40,6 +48,13 @@ class Settings(BaseSettings):
     def validate_confidence_threshold(cls, value: float) -> float:
         if not 0.0 <= value <= 1.0:
             raise ValueError("CONFIDENCE_THRESHOLD must be between 0.0 and 1.0")
+        return value
+
+    @field_validator("razorpay_timeout_seconds")
+    @classmethod
+    def validate_razorpay_timeout(cls, value: float) -> float:
+        if value <= 0:
+            raise ValueError("RAZORPAY_TIMEOUT_SECONDS must be greater than zero")
         return value
 
 

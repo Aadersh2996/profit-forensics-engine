@@ -4,7 +4,7 @@ The submission ships as a FastAPI backend and a Next.js frontend. The frontend p
 
 ## Docker Compose
 
-From the repository root, optionally copy `.env.example` to `.env` and set `OPENAI_API_KEY` for synthesis, then run:
+From the repository root, optionally copy `.env.example` to `.env` and set `OPENAI_API_KEY` for synthesis. To enable server-managed Razorpay ingestion, also set `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET`; otherwise users may supply credentials transiently in the UI. Then run:
 
 ```powershell
 docker compose up --build
@@ -44,4 +44,6 @@ Required operational settings are listed in `.env.example` and `backend/.env.exa
 - Set `ENVIRONMENT=production`.
 - Set a durable `DATABASE_URL` and `UPLOAD_DIR`.
 - Set `OPENAI_API_KEY` only when optional narrative synthesis is desired.
+- Set `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` only for server-managed, read-only Razorpay ingestion. They are injected into the backend container and must never be committed.
+- Tune `RAZORPAY_TIMEOUT_SECONDS` only when the network environment requires it; collection synchronization uses bounded retries and a per-resource record cap.
 - Do not commit `.env`, SQLite databases, or uploaded evidence files.

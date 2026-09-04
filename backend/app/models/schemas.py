@@ -70,6 +70,67 @@ class UploadResponse(DomainModel):
     message: str = Field(min_length=1)
 
 
+class RazorpayResource(StrEnum):
+    PAYMENTS = "payments"
+    REFUNDS = "refunds"
+    ORDERS = "orders"
+    CUSTOMERS = "customers"
+    SUBSCRIPTIONS = "subscriptions"
+    INVOICES = "invoices"
+    SETTLEMENTS = "settlements"
+
+
+class RazorpayCredentials(DomainModel):
+    """Credentials supplied for one Razorpay boundary request and never persisted."""
+
+    key_id: str = Field(min_length=1, max_length=128)
+    key_secret: str = Field(min_length=1, max_length=256)
+
+
+class RazorpayConnectRequest(DomainModel):
+    credentials: RazorpayCredentials | None = None
+
+
+class RazorpayConnectionStatus(DomainModel):
+    configured: bool
+    source: str | None = None
+    message: str
+
+
+class RazorpaySyncRequest(DomainModel):
+    credentials: RazorpayCredentials | None = None
+    resources: list[RazorpayResource] = Field(
+        default_factory=lambda: [
+            RazorpayResource.PAYMENTS,
+            RazorpayResource.REFUNDS,
+            RazorpayResource.SUBSCRIPTIONS,
+            RazorpayResource.INVOICES,
+            RazorpayResource.SETTLEMENTS,
+        ],
+        min_length=1,
+    )
+    from_timestamp: int | None = Field(default=None, ge=0)
+    to_timestamp: int | None = Field(default=None, ge=0)
+    max_records_per_resource: int = Field(default=1_000, ge=1, le=10_000)
+    run_investigation: bool = False
+    investigation_id: str | None = Field(default=None, min_length=1, max_length=36)
+
+    @field_validator("resources")
+    @classmethod
+    def validate_resources(cls, values: list[RazorpayResource]) -> list[RazorpayResource]:
+        if len(values) != len(set(values)):
+            raise ValueError("resources must not contain duplicates")
+        return values
+
+    @field_validator("to_timestamp")
+    @classmethod
+    def validate_sync_time_range(cls, value: int | None, info: Any) -> int | None:
+        start = info.data.get("from_timestamp")
+        if value is not None and start is not None and value < start:
+            raise ValueError("to_timestamp must be greater than or equal to from_timestamp")
+        return value
+
+
 class InvestigationRequest(DomainModel):
     """Input required to execute a graph investigation over registered datasets."""
 
@@ -154,3 +215,9 @@ class InvestigationReport(DomainModel):
     recommendations: list[Recommendation] = Field(default_factory=list)
     executive_summary: ExecutiveSummary | None = None
     timeline: list[TimelineEvent] = Field(default_factory=list)
+
+
+class RazorpaySyncResponse(DomainModel):
+    datasets: list[DatasetMetadata]
+    message: str
+    investigation: InvestigationReport | None = None

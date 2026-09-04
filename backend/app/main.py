@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.datasets import router as datasets_router
 from app.api.investigations import router as investigations_router
+from app.api.razorpay import router as razorpay_router
 from app.config import settings
 from app.db.init_db import init_db
 
@@ -29,6 +30,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
 app.include_router(datasets_router)
 app.include_router(investigations_router)
+app.include_router(razorpay_router)
 
 
 @app.exception_handler(Exception)

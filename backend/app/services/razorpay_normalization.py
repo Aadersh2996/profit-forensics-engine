@@ -10,7 +10,9 @@ from datetime import datetime, timezone
 from typing import Any
 
 
-_SUPPORTED_RESOURCES = {"payments", "refunds", "subscriptions", "invoices"}
+_SUPPORTED_RESOURCES = {
+    "payments", "refunds", "orders", "customers", "subscriptions", "invoices", "settlements"
+}
 
 
 def _records(payload: dict[str, Any] | list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -75,6 +77,24 @@ def _normalize_refund(record: dict[str, Any]) -> dict[str, Any]:
     )
 
 
+def _normalize_order(record: dict[str, Any]) -> dict[str, Any]:
+    return _clean({
+        "order_id": record.get("id"), "status": record.get("status"),
+        "amount": _major_amount(record.get("amount")),
+        "amount_paid": _major_amount(record.get("amount_paid")),
+        "amount_due": _major_amount(record.get("amount_due")),
+        "currency": record.get("currency"), "created_at": _timestamp(record.get("created_at")),
+    })
+
+
+def _normalize_customer(record: dict[str, Any]) -> dict[str, Any]:
+    return _clean({
+        "customer_id": record.get("id"), "name": record.get("name"),
+        "email": record.get("email"), "contact": record.get("contact"),
+        "created_at": _timestamp(record.get("created_at")),
+    })
+
+
 def _normalize_subscription(record: dict[str, Any]) -> dict[str, Any]:
     plan = record.get("plan") if isinstance(record.get("plan"), dict) else {}
     item = plan.get("item") if isinstance(plan.get("item"), dict) else {}
@@ -108,11 +128,23 @@ def _normalize_invoice(record: dict[str, Any]) -> dict[str, Any]:
     )
 
 
+def _normalize_settlement(record: dict[str, Any]) -> dict[str, Any]:
+    return _clean({
+        "settlement_id": record.get("id"),
+        "payment_id": record.get("payment_id") or record.get("entity_id"),
+        "status": record.get("status"), "amount": _major_amount(record.get("amount")),
+        "currency": record.get("currency"), "created_at": _timestamp(record.get("created_at")),
+    })
+
+
 _NORMALIZERS = {
     "payments": _normalize_payment,
     "refunds": _normalize_refund,
+    "orders": _normalize_order,
+    "customers": _normalize_customer,
     "subscriptions": _normalize_subscription,
     "invoices": _normalize_invoice,
+    "settlements": _normalize_settlement,
 }
 
 

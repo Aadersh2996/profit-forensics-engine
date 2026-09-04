@@ -68,3 +68,15 @@ export type InvestigationReport = {
   } | null;
   timeline: TimelineEvent[];
 };
+
+export type RazorpayConnectionStatus = {
+  configured: boolean;
+  source?: string | null;
+  message: string;
+};
+
+export type RazorpaySyncResponse = {
+  datasets: DatasetMetadata[];
+  message: string;
+  investigation?: InvestigationReport | null;
+};

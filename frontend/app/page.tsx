@@ -18,6 +18,7 @@ export default function HomePage() {
         <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-600">Profit Forensics turns CSV records into deterministic cases, traceable financial impact, and clear next actions—without letting an LLM do the math.</p>
         <div className="mt-8 flex flex-wrap gap-3">
           <Link href="/upload" className="inline-flex items-center gap-2 rounded-xl bg-ink px-5 py-3 font-semibold text-white shadow-lg shadow-slate-300 transition hover:bg-slate-800">Start with CSVs <ArrowRight size={17} /></Link>
+          <Link href="/razorpay" className="rounded-xl border border-slate-200 bg-white px-5 py-3 font-semibold text-slate-700 transition hover:bg-slate-50">Connect Razorpay</Link>
           <Link href="/history" className="rounded-xl border border-slate-200 bg-white px-5 py-3 font-semibold text-slate-700 transition hover:bg-slate-50">View investigations</Link>
         </div>
       </div>

@@ -1,4 +1,4 @@
-import type { DatasetMetadata, InvestigationReport } from "@/lib/types";
+import type { DatasetMetadata, InvestigationReport, RazorpayConnectionStatus, RazorpaySyncResponse } from "@/lib/types";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`/api${path}`, options);
@@ -30,4 +30,24 @@ export function getInvestigation(investigationId: string) {
 
 export function listInvestigations() {
   return request<InvestigationReport[]>("/investigations");
+}
+
+type RazorpayCredentials = { key_id: string; key_secret: string };
+
+export function getRazorpayStatus() {
+  return request<RazorpayConnectionStatus>("/razorpay/status");
+}
+
+export function connectRazorpay(credentials: RazorpayCredentials) {
+  return request<RazorpayConnectionStatus>("/razorpay/connect", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ credentials })
+  });
+}
+
+export function syncRazorpay(credentials: RazorpayCredentials, resources: string[], investigationId?: string) {
+  return request<RazorpaySyncResponse>("/razorpay/sync", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ credentials, resources, run_investigation: true, investigation_id: investigationId || null })
+  });
 }

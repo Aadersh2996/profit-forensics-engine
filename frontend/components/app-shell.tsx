@@ -12,6 +12,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </Link>
           <div className="flex items-center gap-5 text-sm font-medium text-slate-600">
             <Link href="/upload" className="hover:text-ink">Upload data</Link>
+            <Link href="/razorpay" className="hover:text-ink">Connect Razorpay</Link>
             <Link href="/investigations/new" className="hover:text-ink">New investigation</Link>
             <Link href="/history" className="hover:text-ink">History</Link>
             <a href="/api/docs" target="_blank" className="hidden items-center gap-1 hover:text-ink md:flex">API <ArrowUpRight size={14} /></a>
